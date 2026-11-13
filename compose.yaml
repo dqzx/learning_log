@@ -1,0 +1,44 @@
+services:
+  web:
+    # Собрать образ по Dockerfile из текущего каталога.
+    build: .
+    # Автоматически запускать контейнер после перезагрузки сервера.
+    restart: unless-stopped
+    # Передать приложению настройки из локального файла .env.
+    env_file:
+      - .env
+    command:
+    command:
+      - sh
+      - -c
+      - |
+        # Остановить запуск при ошибке любой команды.
+        set -e
+        # Применить миграции и собрать статические файлы.
+        python manage.py migrate --noinput
+        python manage.py collectstatic --noinput
+        # Запустить приложение одним рабочим процессом.
+        exec gunicorn learning_log.wsgi:application \
+          --bind 0.0.0.0:8000 \
+          --workers 1 \
+          --threads 4 \
+          --timeout 60
+
+    ports:
+      # Опубликовать порт контейнера; адрес и внешний порт берутся из .env.
+      - "${APP_BIND_IP:-127.0.0.1}:${APP_PORT:-8000}:8000"
+      - "${PORT1}:80"
+    volumes:
+      # Хранить SQLite-базу отдельно от контейнера.
+      - learning_log_data:/app/data
+    healthcheck:
+      # Регулярно проверять, отвечает ли Django внутри контейнера.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  # Именованный том не удаляется при обычном пересоздании контейнера.
+  learning_log_data:
